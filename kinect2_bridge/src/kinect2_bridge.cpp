@@ -68,6 +68,7 @@ private:
   cv::Mat cameraMatrixColor, distortionColor, cameraMatrixLowRes, cameraMatrixIr, distortionIr, cameraMatrixDepth, distortionDepth;
   cv::Mat rotation, translation;
   cv::Mat map1Color, map2Color, map1Ir, map2Ir, map1LowRes, map2LowRes;
+  cv::Mat speckleBuffer;
 
   std::vector<std::thread> threads;
   std::mutex lockIrDepth, lockColor;
@@ -1008,6 +1009,9 @@ private:
     if(status[COLOR_SD_RECT] || status[DEPTH_SD] || status[DEPTH_SD_RECT] || status[DEPTH_QHD] || status[DEPTH_HD])
     {
       cv::Mat(depthFrame->height, depthFrame->width, CV_32FC1, depthFrame->data).copyTo(depth);
+      depth.convertTo(depth, CV_16SC1);
+      cv::filterSpeckles(depth, NAN, 50, 500, speckleBuffer);
+      depth.convertTo(depth, CV_32FC1);
     }
 
     if(status[IR_SD] || status[IR_SD_RECT])
