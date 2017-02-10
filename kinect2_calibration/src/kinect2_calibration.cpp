@@ -24,6 +24,7 @@
 #include <vector>
 #include <mutex>
 #include <thread>
+#include <poll.h> 
 
 #include <dirent.h>
 #include <sys/stat.h>
@@ -90,6 +91,8 @@ private:
   ros::AsyncSpinner spinner;
   image_transport::ImageTransport it;
   image_transport::SubscriberFilter *subImageColor, *subImageIr, *subImageDepth;
+  image_transport::Publisher pubColor, pubIr;
+  cv_bridge::CvImage cvBridgeColor, cvBridgeIr;;
   message_filters::Synchronizer<ColorIrDepthSyncPolicy> *sync;
 
   int minIr, maxIr;
@@ -158,6 +161,11 @@ private:
 
     sync = new message_filters::Synchronizer<ColorIrDepthSyncPolicy>(ColorIrDepthSyncPolicy(4), *subImageColor, *subImageIr, *subImageDepth);
     sync->registerCallback(boost::bind(&Recorder::callback, this, _1, _2, _3));
+
+    pubColor  = it.advertise("kinect2_calibration/color", 4);
+    pubIr     = it.advertise("kinect2_calibration/ir", 4);
+    cvBridgeColor.encoding = sensor_msgs::image_encodings::BGR8;
+    cvBridgeIr.encoding = sensor_msgs::image_encodings::BGR8;
 
     spinner.start();
   }
@@ -352,23 +360,44 @@ private:
       switch(mode)
       {
       case COLOR:
-        cv::imshow("color", colorDisp);
+        cvBridgeColor.image = colorDisp;
+        pubColor.publish(*cvBridgeColor.toImageMsg());
+        // cv::imshow("color", colorDisp);
         break;
       case IR:
-        cv::imshow("ir", irDisp);
+        cvBridgeIr.image = irDisp;
+        pubIr.publish(*cvBridgeIr.toImageMsg());
+        // cv::imshow("ir", irDisp);
         break;
       case SYNC:
-        cv::imshow("color", colorDisp);
-        cv::imshow("ir", irDisp);
+        cvBridgeColor.image = colorDisp;
+        cvBridgeIr.image = irDisp;
+        pubColor.publish(*cvBridgeColor.toImageMsg());
+        pubIr.publish(*cvBridgeIr.toImageMsg());
+        // cv::imshow("color", colorDisp);
+        // cv::imshow("ir", irDisp);
         break;
       }
 
-      int key = cv::waitKey(10);
+      // int key = cv::waitKey(10);
+      fd_set selectset;
+      struct timeval timeout = {0,10000}; //timeout of 10ms
+      int ret; char key;
+      FD_ZERO(&selectset);
+      FD_SET(0,&selectset);
+      ret =  select(1,&selectset,NULL,NULL,&timeout);
+      if(ret == 0)
+        key = 'x'; // undefined
+      else if(ret == -1)
+        key = 'x';
+      else
+        read(1, &key, 1);
       switch(key & 0xFF)
       {
       case ' ':
       case 's':
         save = true;
+        std::cout << "save\n";
         break;
       case 27:
       case 'q':
